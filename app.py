@@ -343,12 +343,46 @@ def build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbo
     fig.update_xaxes(rangebreaks=[dict(bounds=["sat","mon"])])
     return fig
 
+# ================= 期货品种搜索 =================
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_futures_list() -> pd.DataFrame:
+    """
+    从东方财富获取国内期货全品种列表。
+    返回 DataFrame，列: code, name, exchange
+    ttl=1小时缓存，避免重复请求。
+    """
+    url = (
+        "https://push2.eastmoney.com/api/qt/clist/get"
+        "?pn=1&pz=500&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281"
+        "&fltt=2&invt=2&fid=f3&fs=m:113,m:114,m:115,m:8"
+        "&fields=f12,f14,f13"
+    )
+    try:
+        r = SESSION.get(url, timeout=10)
+        r.raise_for_status()
+        items = r.json().get("data", {}).get("diff", [])
+        if not items:
+            return pd.DataFrame()
+        rows = []
+        ex_map = {"113": "上期所", "114": "大商所", "115": "郑商所", "8": "中金所"}
+        for item in items:
+            code = str(item.get("f12", "")).strip()
+            name = str(item.get("f14", "")).strip()
+            ex   = ex_map.get(str(item.get("f13", "")), "")
+            if code and name:
+                rows.append({"code": code, "name": name, "exchange": ex,
+                             "label": f"{code}  {name}（{ex}）"})
+        return pd.DataFrame(rows)
+    except Exception:
+        return pd.DataFrame()
+
 # ================= session_state 初始化（解决侧边栏双击 bug）=================
 _MARKET_LIST = [MARKET_US, MARKET_CN, MARKET_HK, MARKET_FUTURES]
 _DEFAULT_SYM  = {MARKET_US:"EDU", MARKET_CN:"000001", MARKET_HK:"00700", MARKET_FUTURES:"RB0"}
 
 if "mkt" not in st.session_state: st.session_state["mkt"] = MARKET_US
 if "sym" not in st.session_state: st.session_state["sym"] = _DEFAULT_SYM[MARKET_US]
+if "futures_df" not in st.session_state: st.session_state["futures_df"] = None
 
 # ================= 侧边栏 =================
 with st.sidebar:
@@ -363,17 +397,77 @@ with st.sidebar:
     if market != st.session_state["mkt"]:
         st.session_state["mkt"] = market
         st.session_state["sym"] = _DEFAULT_SYM[market]
-        st.rerun()  # 强制刷新，保证 text_input 立刻显示新默认值
+        st.rerun()
 
-    symbol = st.text_input(
-        "交易标的",
-        value=st.session_state["sym"],
-        help=(
-            "A股: 000001  港股: 00700  美股: AAPL\n"
-            "期货主力(0结尾): RB0(螺纹钢) AU0(黄金) IF0(沪深300) M0(豆粕) CU0(铜)"
-        ),
-    )
-    st.session_state["sym"] = symbol  # 同步输入，防 rerun 丢失
+    # ── 期货：快捷搜索下拉 ──────────────────────────────────
+    if market == MARKET_FUTURES:
+        with st.spinner("加载期货品种列表..."):
+            fdf = fetch_futures_list()
+
+        if fdf.empty:
+            # API 失败时退化为手动输入
+            st.warning("⚠️ 期货列表加载失败，请手动输入代码")
+            symbol = st.text_input(
+                "合约代码",
+                value=st.session_state["sym"],
+                placeholder="如 RB0、AU0、IF0",
+                help="主力合约以 0 结尾：RB0(螺纹钢) AU0(黄金) IF0(沪深300) M0(豆粕)",
+            )
+        else:
+            # 搜索框过滤
+            search_kw = st.text_input(
+                "🔍 搜索品种",
+                value="",
+                placeholder="输入代码或名称，如 螺纹 / RB / 黄金",
+            )
+            if search_kw.strip():
+                kw = search_kw.strip().upper()
+                mask = (
+                    fdf["code"].str.upper().str.contains(kw, na=False) |
+                    fdf["name"].str.contains(search_kw.strip(), na=False) |
+                    fdf["exchange"].str.contains(search_kw.strip(), na=False)
+                )
+                filtered = fdf[mask]
+            else:
+                filtered = fdf
+
+            if filtered.empty:
+                st.warning(f"未找到「{search_kw}」，请换个关键词或直接输入代码")
+                symbol = st.text_input("手动输入代码", value=st.session_state["sym"])
+            else:
+                labels  = filtered["label"].tolist()
+                codes   = filtered["code"].tolist()
+
+                # 默认选中 session_state 里已有的品种
+                default_idx = 0
+                if st.session_state["sym"] in codes:
+                    default_idx = codes.index(st.session_state["sym"])
+
+                chosen = st.selectbox(
+                    f"选择合约（共 {len(filtered)} 个）",
+                    labels,
+                    index=default_idx,
+                )
+                symbol = codes[labels.index(chosen)]
+                # 显示当前选中信息
+                st.caption(f"📌 当前合约：**{symbol}**")
+
+        if not symbol or not symbol.strip():
+            st.error("⚠️ 请先选择或输入期货合约代码")
+            symbol = st.session_state["sym"]
+
+    # ── 非期货：普通文本输入 ────────────────────────────────
+    else:
+        symbol = st.text_input(
+            "交易标的",
+            value=st.session_state["sym"],
+            help=(
+                "A股: 000001  港股: 00700  美股: AAPL\n"
+                "期货主力(0结尾): RB0(螺纹钢) AU0(黄金) IF0(沪深300) M0(豆粕)"
+            ),
+        )
+
+    st.session_state["sym"] = symbol  # 同步，防 rerun 丢失
 
     start_date = st.date_input("开始日期", value=pd.to_datetime("2025-06-01"))
     end_date   = st.date_input("结束日期",  value=pd.to_datetime("today"))
