@@ -1,6 +1,7 @@
 import os
 import urllib.request
 import time, json, re
+import hashlib
 import requests
 import streamlit as st
 import pandas as pd
@@ -22,13 +23,108 @@ HEADERS = {
 SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
 
-# ================= 页面样式设置 =================
+# ================= 页面基础配置（必须第一个 st 调用）=================
 st.set_page_config(
     page_title="缠论AI解盘终端",
     layout="wide",
     initial_sidebar_state="expanded",
-    menu_items={}   # 清空右上角菜单，避免显示部署等选项
+    menu_items={}
 )
+
+# ================= 密钥认证系统 =================
+# 在此处配置允许访问的密钥（SHA-256 哈希值）
+# 生成方法：python3 -c "import hashlib; print(hashlib.sha256('你的密钥'.encode()).hexdigest())"
+# 示例密钥列表（每行一个哈希，对应一个用户）：
+VALID_KEY_HASHES = {
+    # 格式: "用户备注": "sha256哈希值"
+    # 用 gen_key.py 生成新密钥，或运行:
+    # python3 -c "import hashlib; print(hashlib.sha256('你的密钥'.encode()).hexdigest())"
+    "admin":  "6e2321f039a6693bd0d63a08c3d48ad098f949e19994bbd3b1fef344b75a5d59",  # 密钥: YV3q^A49kJ!$CwLDrJ7OV5VQ
+    # 继续添加用户：
+    # "张三": "哈希值",
+    # "李四": "哈希值",
+}
+
+def _hash(key: str) -> str:
+    return hashlib.sha256(key.strip().encode()).hexdigest()
+
+def check_auth() -> bool:
+    """返回 True 表示已通过验证"""
+    return st.session_state.get("authenticated", False)
+
+def login_page():
+    """渲染登录页面，验证通过后设置 session_state"""
+    st.markdown("""
+    <style>
+    /* 登录页全屏居中 */
+    [data-testid="stAppViewContainer"] > .main {
+        display: flex; align-items: center; justify-content: center;
+    }
+    .login-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 2.5rem 3rem;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+        margin: 8vh auto;
+    }
+    .login-title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #0f172a;
+        text-align: center;
+        margin-bottom: 0.3rem;
+    }
+    .login-sub {
+        font-size: 0.85rem;
+        color: #64748b;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    with col_c:
+        st.markdown('<div class="login-title">📈 缠论AI解盘终端</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-sub">请输入管理员分配给您的访问密钥（非哈希值）</div>', unsafe_allow_html=True)
+
+        key_input = st.text_input(
+            "访问密钥",
+            type="password",
+            placeholder="输入收到的密钥，如 WiikPwpHGrOgkuqx",
+            label_visibility="collapsed",
+        )
+
+        login_btn = st.button("🔓 验证并进入", type="primary", use_container_width=True)
+
+        if login_btn:
+            if not key_input.strip():
+                st.error("⚠️ 请输入密钥")
+            elif _hash(key_input) in VALID_KEY_HASHES.values():
+                st.session_state["authenticated"] = True
+                # 记录是哪个用户登录的
+                for name, h in VALID_KEY_HASHES.items():
+                    if h == _hash(key_input):
+                        st.session_state["username"] = name
+                        break
+                st.rerun()
+            else:
+                st.error("❌ 密钥错误，请联系管理员获取访问权限")
+
+        st.markdown(
+            '<div style="text-align:center;margin-top:1.5rem;font-size:0.75rem;color:#94a3b8;">'
+            '密钥由管理员分配 · 请勿泄露给他人'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+# ================= 登录拦截 =================
+if not check_auth():
+    login_page()
+    st.stop()
 
 st.markdown("""
 <style>
@@ -179,13 +275,94 @@ def fetch_cn(symbol, start_date, end_date):
     return df[(df["date"] >= pd.to_datetime(start_date)) & (df["date"] <= pd.to_datetime(end_date))].reset_index(drop=True)
 
 def fetch_hk(symbol, start_date, end_date):
+    """
+    港股日K，三数据源自动切换：
+    1. 腾讯前复权 (qfqday)
+    2. 腾讯普通日K (day)
+    3. 东方财富 (secid 116.XXXXX)
+    """
     sym = symbol.replace(".HK", "").zfill(5)
     sd  = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
     ed  = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
-    raw = SESSION.get(f"https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param=hk{sym},day,{sd},{ed},640,qfq", timeout=15).json().get("data", {}).get(f"hk{sym}", {}).get("qfqday", [])
-    if not raw: raise ValueError("港股接口返回空数据")
-    df = pd.DataFrame([{"date": pd.to_datetime(r[0]), "open": float(r[1]), "close": float(r[2]), "high": float(r[3]), "low": float(r[4])} for r in raw])
-    return df[(df["date"] >= pd.to_datetime(start_date)) & (df["date"] <= pd.to_datetime(end_date))].reset_index(drop=True)
+
+    def _parse(raw):
+        rows = []
+        for r in raw:
+            try:
+                rows.append({"date": pd.to_datetime(r[0]), "open": float(r[1]),
+                              "close": float(r[2]), "high": float(r[3]), "low": float(r[4])})
+            except Exception:
+                continue
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows)
+        s, e = pd.to_datetime(start_date), pd.to_datetime(end_date)
+        return df[(df["date"] >= s) & (df["date"] <= e)].reset_index(drop=True)
+
+    # ── 1. 腾讯前复权 ────────────────────────────────────────
+    try:
+        data = SESSION.get(
+            f"https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get"
+            f"?param=hk{sym},day,{sd},{ed},640,qfq", timeout=12
+        ).json().get("data", {}).get(f"hk{sym}", {})
+        raw = data.get("qfqday") or data.get("day") or []
+        if raw:
+            df = _parse(raw)
+            if not df.empty:
+                return df
+    except Exception:
+        pass
+
+    # ── 2. 腾讯普通日K ───────────────────────────────────────
+    try:
+        data = SESSION.get(
+            f"https://web.ifzq.gtimg.cn/appstock/app/kline/get"
+            f"?param=hk{sym},day,{sd},{ed},640", timeout=12
+        ).json().get("data", {}).get(f"hk{sym}", {})
+        raw = data.get("day") or []
+        if raw:
+            df = _parse(raw)
+            if not df.empty:
+                return df
+    except Exception:
+        pass
+
+    # ── 3. 东方财富港股接口 ──────────────────────────────────
+    try:
+        # 港股 secid 前缀为 116，代码去掉前导零
+        code_em = str(int(sym))
+        url_em = (
+            f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+            f"?secid=116.{code_em}"
+            f"&fields1=f1,f2,f3,f4,f5,f6"
+            f"&fields2=f51,f52,f53,f54,f55"
+            f"&lmt=1000&klt=101&fqt=1"
+            f"&beg={start_date}&end={end_date}"
+        )
+        r = SESSION.get(url_em, timeout=12)
+        r.raise_for_status()
+        klines = r.json().get("data", {}).get("klines") or []
+        if klines:
+            rows = []
+            for k in klines:
+                p = k.split(",")
+                rows.append({"date": pd.to_datetime(p[0]), "open": float(p[1]),
+                              "close": float(p[2]), "high": float(p[3]), "low": float(p[4])})
+            df = pd.DataFrame(rows)
+            s, e = pd.to_datetime(start_date), pd.to_datetime(end_date)
+            df = df[(df["date"] >= s) & (df["date"] <= e)].reset_index(drop=True)
+            if not df.empty:
+                return df
+    except Exception:
+        pass
+
+    raise ValueError(
+        f"港股 [{symbol}] 三个数据源均未返回数据。\n"
+        f"请确认：\n"
+        f"• 代码格式正确（如美团=03690，腾讯=00700，阿里=09988）\n"
+        f"• 所选日期范围内有交易数据\n"
+        f"• 网络连接正常"
+    )
 
 def fetch_us(symbol, start_date, end_date):
     import yfinance as yf, datetime
@@ -347,34 +524,47 @@ def build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbo
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_futures_list() -> pd.DataFrame:
     """
-    从东方财富获取国内期货全品种列表。
+    从东方财富获取国内期货全品种列表（含具体月份合约，如 JM2605）。
     返回 DataFrame，列: code, name, exchange
-    ttl=1小时缓存，避免重复请求。
     """
-    url = (
-        "https://push2.eastmoney.com/api/qt/clist/get"
-        "?pn=1&pz=500&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281"
-        "&fltt=2&invt=2&fid=f3&fs=m:113,m:114,m:115,m:8"
-        "&fields=f12,f14,f13"
-    )
-    try:
-        r = SESSION.get(url, timeout=10)
-        r.raise_for_status()
-        items = r.json().get("data", {}).get("diff", [])
-        if not items:
-            return pd.DataFrame()
-        rows = []
-        ex_map = {"113": "上期所", "114": "大商所", "115": "郑商所", "8": "中金所"}
-        for item in items:
-            code = str(item.get("f12", "")).strip()
-            name = str(item.get("f14", "")).strip()
-            ex   = ex_map.get(str(item.get("f13", "")), "")
-            if code and name:
-                rows.append({"code": code, "name": name, "exchange": ex,
-                             "label": f"{code}  {name}（{ex}）"})
-        return pd.DataFrame(rows)
-    except Exception:
+    ex_map = {"113": "上期所", "114": "大商所", "115": "郑商所", "8": "中金所"}
+    all_rows = []
+
+    # 每个交易所单独请求，确保获取全部合约
+    for ex_id, ex_name in ex_map.items():
+        try:
+            url = (
+                f"https://push2.eastmoney.com/api/qt/clist/get"
+                f"?pn=1&pz=1000&po=1&np=1"
+                f"&ut=bd1d9ddb04089700cf9c27f6f7426281"
+                f"&fltt=2&invt=2&fid=f3"
+                f"&fs=m:{ex_id}"
+                f"&fields=f12,f14,f13"
+            )
+            r = SESSION.get(url, timeout=10)
+            r.raise_for_status()
+            items = r.json().get("data", {}).get("diff", []) or []
+            for item in items:
+                code = str(item.get("f12", "")).strip()
+                name = str(item.get("f14", "")).strip()
+                if code and name:
+                    all_rows.append({
+                        "code":     code,
+                        "name":     name,
+                        "exchange": ex_name,
+                        "label":    f"{code}  {name}（{ex_name}）",
+                    })
+        except Exception:
+            continue
+
+    if not all_rows:
         return pd.DataFrame()
+
+    df = pd.DataFrame(all_rows).drop_duplicates(subset="code")
+    # 排序：主力合约（0结尾）排在前面，具体月份合约按代码排
+    df["is_main"] = df["code"].str.match(r'^[A-Z]+0$')
+    df = df.sort_values(["is_main", "code"], ascending=[False, True]).drop(columns="is_main")
+    return df.reset_index(drop=True)
 
 # ================= session_state 初始化（解决侧边栏双击 bug）=================
 _MARKET_LIST = [MARKET_US, MARKET_CN, MARKET_HK, MARKET_FUTURES]
@@ -386,6 +576,20 @@ if "futures_df" not in st.session_state: st.session_state["futures_df"] = None
 
 # ================= 侧边栏 =================
 with st.sidebar:
+    # 顶部：当前用户 + 退出按钮
+    username = st.session_state.get("username", "用户")
+    col_u, col_out = st.columns([3, 1])
+    with col_u:
+        st.markdown(
+            f'<div style="font-size:0.8rem;color:#64748b;padding-top:4px;">🔐 {username}</div>',
+            unsafe_allow_html=True,
+        )
+    with col_out:
+        if st.button("退出", use_container_width=True):
+            st.session_state["authenticated"] = False
+            st.session_state["username"] = ""
+            st.rerun()
+
     st.markdown("### ⚙️ 交易终端参数")
 
     market = st.selectbox(
