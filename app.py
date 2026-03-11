@@ -171,8 +171,11 @@ footer { visibility: hidden; }
 .sym-name { font-size:1.15rem; font-weight:800; color:#0f172a; }
 .sym-market { font-size:0.75rem; color:#94a3b8; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:2px 6px; }
 .sym-hint { font-size:0.9rem; color:#94a3b8; padding:0.5rem 0.2rem 0.8rem; border-bottom:1px solid #f1f5f9; margin-bottom:0.8rem; }
+/* 快捷区间容器 */
+.preset-wrap { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; background: #f8fafc; margin-bottom: 4px; }
+.preset-label { font-size: 0.75rem; color: #94a3b8; margin-bottom: 6px; letter-spacing: 0.03em; }
 /* 快捷区间按钮紧凑样式 */
-[data-testid="stSidebar"] button[kind="secondary"] { padding: 0.2rem 0.1rem !important; font-size: 0.78rem !important; min-height: 1.8rem !important; }
+[data-testid="stSidebar"] button[kind="secondary"] { padding: 0.15rem 0 !important; font-size: 0.8rem !important; min-height: 1.7rem !important; border-radius: 6px !important; }
 
 /* ========== 移动端适配 ========== */
 @media (max-width: 768px) {
@@ -794,32 +797,31 @@ with st.sidebar:
 
     st.session_state["sym"] = symbol  # 同步，防 rerun 丢失
 
-    # ── 快捷区间 ─────────────────────────────────────────────
-    st.markdown('<div style="font-size:0.8rem;color:#64748b;margin:6px 0 4px;">⚡ 快捷区间</div>', unsafe_allow_html=True)
-    # 第一行：今日 / 昨日
-    _dc1, _dc2 = st.columns(2)
-    with _dc1:
-        if st.button("今日", key="preset_today", use_container_width=True):
-            _t = _dt.date.today()
-            st.session_state["start_date"] = _t
-            st.session_state["end_date"]   = _t
-            st.rerun()
-    with _dc2:
-        if st.button("昨日", key="preset_yesterday", use_container_width=True):
-            _t = _dt.date.today() - _dt.timedelta(days=1)
-            st.session_state["start_date"] = _t
-            st.session_state["end_date"]   = _t
-            st.rerun()
-    # 第二行：1月 / 1季 / 半年 / 1年
-    _qcols = st.columns(4)
-    _quick = [("1月", 30), ("1季", 91), ("半年", 183), ("1年", 365)]
-    for _qc, (_ql, _qd) in zip(_qcols, _quick):
-        with _qc:
-            if st.button(_ql, key=f"preset_{_qd}", use_container_width=True):
+    # ── 快捷区间（3×2 网格）────────────────────────────────
+    st.markdown('<div class="preset-wrap"><div class="preset-label">⚡ 快捷区间</div>', unsafe_allow_html=True)
+    _row1 = st.columns(3)
+    _row2 = st.columns(3)
+    _presets = [
+        ("今日",  0,   True),   # (label, days, is_single_day)
+        ("昨日",  1,   True),
+        ("1月",   30,  False),
+        ("1季",   91,  False),
+        ("半年",  183, False),
+        ("1年",   365, False),
+    ]
+    for _col, (_ql, _qd, _single) in zip(_row1 + _row2, _presets):
+        with _col:
+            if st.button(_ql, key=f"preset_{_ql}", use_container_width=True):
                 _t = _dt.date.today()
-                st.session_state["start_date"] = _t - _dt.timedelta(days=_qd)
-                st.session_state["end_date"]   = _t
+                if _single:
+                    _s = _t - _dt.timedelta(days=_qd)
+                    st.session_state["start_date"] = _s
+                    st.session_state["end_date"]   = _s
+                else:
+                    st.session_state["start_date"] = _t - _dt.timedelta(days=_qd)
+                    st.session_state["end_date"]   = _t
                 st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
     start_date = st.date_input("开始日期", key="start_date")
     end_date   = st.date_input("结束日期",  key="end_date")
