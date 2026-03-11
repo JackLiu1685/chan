@@ -450,11 +450,67 @@ def fetch_us(symbol, start_date, end_date):
     df = pd.DataFrame({"date": raw["Date"], "open": raw["Open"], "high": raw["High"], "low": raw["Low"], "close": raw["Close"]})
     return df[df["close"] > 0].reset_index(drop=True)
 
-def fetch_stock_data(symbol, start_date, end_date, market):
+def fetch_stock_data(symbol, start_date, end_date, market, klt="101"):
+    if klt != "101":
+        return _fetch_intraday(symbol, start_date, end_date, market, klt)
     if market == MARKET_FUTURES: return fetch_futures(symbol, start_date, end_date)
     if market == MARKET_CN:      return fetch_cn(symbol, start_date, end_date)
     elif market == MARKET_HK:    return fetch_hk(symbol, start_date, end_date)
     elif market == MARKET_US:    return fetch_us(symbol, start_date, end_date)
+
+# ================= 分时数据获取 =================
+def _fetch_intraday_em(secid: str, start_date: str, end_date: str, klt: str) -> pd.DataFrame:
+    """东方财富分钟K线（A股/港股/期货通用）"""
+    url = (
+        f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55"
+        f"&lmt=2000&klt={klt}&fqt=0&beg={start_date}&end={end_date}"
+    )
+    r = SESSION.get(url, timeout=15)
+    r.raise_for_status()
+    klines = r.json().get("data", {}).get("klines") or []
+    rows = []
+    for k in klines:
+        p = k.split(",")
+        try:
+            rows.append({"date": pd.to_datetime(p[0]), "open": float(p[1]),
+                         "close": float(p[2]), "high": float(p[3]), "low": float(p[4])})
+        except Exception:
+            continue
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+def _fetch_intraday(symbol, start_date, end_date, market, klt):
+    if market == MARKET_CN:
+        pfx_id = "1" if (int(symbol) >= 600000 or 500000 <= int(symbol) < 600000) else "0"
+        df = _fetch_intraday_em(f"{pfx_id}.{symbol}", start_date, end_date, klt)
+        if df.empty: raise ValueError(f"A股 [{symbol}] 分时数据为空，请确认交易日期")
+        return df
+    elif market == MARKET_HK:
+        sym = symbol.replace(".HK", "").zfill(5)
+        df = _fetch_intraday_em(f"116.{str(int(sym))}", start_date, end_date, klt)
+        if df.empty: raise ValueError(f"港股 [{symbol}] 分时数据为空，请确认交易日期")
+        return df
+    elif market == MARKET_FUTURES:
+        sym = symbol.strip().upper()
+        ex_id = _FUTURES_EXCHANGE.get(re.sub(r'\d+$', '', sym), "113")
+        df = _fetch_intraday_em(f"{ex_id}.{sym}", start_date, end_date, klt)
+        if df.empty: raise ValueError(f"期货 [{symbol}] 分时数据为空，请确认交易日期")
+        return df
+    elif market == MARKET_US:
+        import yfinance as yf, datetime
+        klt_map = {"1": "1m", "5": "5m", "15": "15m", "30": "30m", "60": "60m"}
+        interval = klt_map.get(klt, "5m")
+        sd = datetime.datetime.strptime(start_date, "%Y%m%d").strftime("%Y-%m-%d")
+        ed = (datetime.datetime.strptime(end_date, "%Y%m%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        raw = yf.Ticker(symbol.replace(".", "-").upper()).history(start=sd, end=ed, interval=interval, auto_adjust=True).reset_index()
+        if raw.empty: raise ValueError(f"美股 [{symbol}] 分时数据为空，请确认交易日期")
+        dt_col = "Datetime" if "Datetime" in raw.columns else "Date"
+        raw[dt_col] = pd.to_datetime(raw[dt_col])
+        if raw[dt_col].dt.tz is not None:
+            raw[dt_col] = raw[dt_col].dt.tz_localize(None)
+        df = pd.DataFrame({"date": raw[dt_col], "open": raw["Open"],
+                           "high": raw["High"], "low": raw["Low"], "close": raw["Close"]})
+        return df[df["close"] > 0].reset_index(drop=True)
 
 # ================= 缠论核心推演算法 =================
 def process_inclusion(df):
@@ -536,8 +592,10 @@ def analyze_signals(vs, hubs):
     return buy_s, sell_s
 
 # ================= 动态 Plotly 图表 =================
-def build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbol, market):
+def build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbol, market, klt="101"):
     currency = {"A股":"¥","港股":"HK$","美股":"$","国内期货":"点"}.get(market,"")
+    is_intraday = klt != "101"
+    tfmt = "%Y-%m-%d %H:%M" if is_intraday else "%Y-%m-%d"
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75,0.25])
 
     fig.add_trace(go.Candlestick(
@@ -545,7 +603,7 @@ def build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbo
         name="K线", increasing_line_color="#ef4444", decreasing_line_color="#10b981",
         increasing_fillcolor="#ef4444", decreasing_fillcolor="#10b981",
         hoverinfo="text",
-        hovertext=[f"{d.strftime('%Y-%m-%d')}<br>收:{c:.2f}" for d,c in zip(df.index, df.close)]
+        hovertext=[f"{d.strftime(tfmt)}<br>收:{c:.2f}" for d,c in zip(df.index, df.close)]
     ), row=1, col=1)
 
     stroke_x = [pd.to_datetime(s["kline"]["date"]) for s in valid_strokes if pd.to_datetime(s["kline"]["date"]) in df.index]
@@ -600,7 +658,9 @@ def build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbo
         xaxis2=dict(gridcolor="#f1f5f9"), yaxis2=dict(gridcolor="#f1f5f9",side="right"),
         dragmode="pan",
     )
-    fig.update_xaxes(rangebreaks=[dict(bounds=["sat","mon"])])
+    # 日线去掉周末空档；分时图不加 rangebreaks（自然留空即可）
+    if not is_intraday:
+        fig.update_xaxes(rangebreaks=[dict(bounds=["sat","mon"])])
     return fig
 
 # ================= 期货品种搜索 =================
@@ -692,7 +752,10 @@ if "sym"        not in st.session_state: st.session_state["sym"]        = _DEFAU
 if "sym_name"   not in st.session_state: st.session_state["sym_name"]   = ""
 if "start_date" not in st.session_state: st.session_state["start_date"] = _today - _dt.timedelta(days=183)
 if "end_date"   not in st.session_state: st.session_state["end_date"]   = _today
+if "klt"        not in st.session_state: st.session_state["klt"]        = "101"
 if "futures_df" not in st.session_state: st.session_state["futures_df"] = None
+
+_KLT_MAP = {"日K": "101", "60分": "60", "30分": "30", "15分": "15", "5分": "5"}
 
 # ================= 侧边栏 =================
 with st.sidebar:
@@ -797,6 +860,19 @@ with st.sidebar:
 
     st.session_state["sym"] = symbol  # 同步，防 rerun 丢失
 
+    # ── K线周期选择 ───────────────────────────────────────
+    st.markdown('<div style="font-size:0.8rem;color:#64748b;margin:6px 0 3px;">📊 K线周期</div>', unsafe_allow_html=True)
+    _klt_cols = st.columns(5)
+    for _kc, (_kl, _kv) in zip(_klt_cols, _KLT_MAP.items()):
+        with _kc:
+            _active = st.session_state["klt"] == _kv
+            if st.button(_kl, key=f"klt_{_kv}",
+                         use_container_width=True,
+                         type="primary" if _active else "secondary"):
+                st.session_state["klt"] = _kv
+                st.rerun()
+    klt = st.session_state["klt"]
+
     # ── 快捷区间（3×2 网格）────────────────────────────────
     st.markdown('<div class="preset-wrap"><div class="preset-label">⚡ 快捷区间</div>', unsafe_allow_html=True)
     _row1 = st.columns(3)
@@ -872,7 +948,7 @@ if run_btn:
 
     with st.spinner(f"正在分析 {symbol} 的几何结构与动力学特征..."):
         try:
-            df_raw = fetch_stock_data(symbol, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"), market)
+            df_raw = fetch_stock_data(symbol, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"), market, klt)
             if df_raw is None or df_raw.empty:
                 st.warning(f"⚠️ 未查询到「{symbol}」的行情数据，请检查代码格式或调整日期范围")
                 st.stop()
@@ -913,7 +989,7 @@ if run_btn:
             </div>
             """, unsafe_allow_html=True)
 
-            plotly_fig = build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbol, market)
+            plotly_fig = build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbol, market, klt)
             st.plotly_chart(plotly_fig, use_container_width=True, config={
                 "displayModeBar": False,
                 "scrollZoom": True,
