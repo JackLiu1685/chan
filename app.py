@@ -677,7 +677,7 @@ def get_stock_name(symbol: str, market: str) -> str:
 
 # ================= session_state 初始化（解决侧边栏双击 bug）=================
 _MARKET_LIST = [MARKET_US, MARKET_CN, MARKET_HK, MARKET_FUTURES]
-_DEFAULT_SYM  = {MARKET_US:"EDU", MARKET_CN:"000001", MARKET_HK:"00700", MARKET_FUTURES:"RB0"}
+_DEFAULT_SYM  = {MARKET_US:"NVDA", MARKET_CN:"300308", MARKET_HK:"01810", MARKET_FUTURES:"AU0"}
 
 if "mkt"      not in st.session_state: st.session_state["mkt"]      = MARKET_US
 if "sym"      not in st.session_state: st.session_state["sym"]      = _DEFAULT_SYM[MARKET_US]
