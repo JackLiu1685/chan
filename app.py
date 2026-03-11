@@ -893,8 +893,8 @@ if run_btn:
             df.set_index("date", inplace=True)
 
             cur  = df["close"].iloc[-1]
-            prev = df["close"].iloc[-2]
-            pct  = (cur - prev) / prev * 100
+            prev = df["close"].iloc[-2] if len(df) >= 2 else cur
+            pct  = (cur - prev) / prev * 100 if prev != 0 else 0.0
             currency = {"A股":"¥","港股":"HK$","美股":"$","国内期货":"点"}.get(market,"")
 
             hub_status, status_color = "震荡发育中", "#64748b"
