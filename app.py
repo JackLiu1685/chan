@@ -27,7 +27,7 @@ SESSION.headers.update(HEADERS)
 st.set_page_config(
     page_title="缠论AI解盘终端",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
     menu_items={}
 )
 
@@ -83,10 +83,21 @@ def login_page():
         text-align: center;
         margin-bottom: 2rem;
     }
+    /* 移动端登录页适配 */
+    @media (max-width: 768px) {
+        .login-card {
+            padding: 1.5rem 1.2rem;
+            margin: 3vh auto;
+            border-radius: 12px;
+        }
+        .login-title { font-size: 1.3rem; }
+        /* 防止 iOS Safari 自动缩放输入框 */
+        input[type="password"], input[type="text"] { font-size: 16px !important; }
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    col_l, col_c, col_r = st.columns([1, 2, 1])
+    col_l, col_c, col_r = st.columns([0.5, 3, 0.5])
     with col_c:
         st.markdown('<div class="login-title">📈 缠论AI解盘终端</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-sub">请输入管理员分配给您的访问密钥（非哈希值）</div>', unsafe_allow_html=True)
@@ -143,7 +154,7 @@ footer { visibility: hidden; }
 [data-testid="collapsedControl"] button > span { font-size: 0; color: transparent; }
 [data-testid="collapsedControl"] button::after { content: "▶"; font-size: 14px; color: #888; }
 
-/* 布局 */
+/* 布局 - 桌面端 */
 .block-container { padding-top: 3.5rem !important; padding-bottom: 1rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
 [data-testid="stSidebar"] { padding-top: 1rem !important; }
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0.2rem !important; }
@@ -155,6 +166,66 @@ footer { visibility: hidden; }
 .metric-label { font-size: 0.75rem; color: #64748b; font-weight: 500; }
 .section-title { font-size: 1.1rem; font-weight: bold; color: #0f172a; border-left: 4px solid #3b82f6; padding-left: 0.5rem; margin: 1rem 0 0.8rem 0; }
 .chan-theory-box { background-color: #f8fafc; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 6px; margin-bottom: 10px; font-size: 0.9rem; color: #334155; line-height: 1.5; }
+.sym-header { display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0.2rem 0.8rem; border-bottom:1px solid #e2e8f0; margin-bottom:0.8rem; }
+.sym-code { font-size:1rem; font-weight:700; color:#64748b; background:#f1f5f9; border-radius:6px; padding:2px 8px; }
+.sym-name { font-size:1.15rem; font-weight:800; color:#0f172a; }
+.sym-market { font-size:0.75rem; color:#94a3b8; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:2px 6px; }
+.sym-hint { font-size:0.9rem; color:#94a3b8; padding:0.5rem 0.2rem 0.8rem; border-bottom:1px solid #f1f5f9; margin-bottom:0.8rem; }
+
+/* ========== 移动端适配 ========== */
+@media (max-width: 768px) {
+    /* 收窄主区域 padding，给内容留更多空间 */
+    .block-container {
+        padding-top: 2.5rem !important;
+        padding-left: 0.6rem !important;
+        padding-right: 0.6rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    /* 侧边栏在移动端减少内边距 */
+    [data-testid="stSidebar"] .block-container {
+        padding-left: 0.8rem !important;
+        padding-right: 0.8rem !important;
+    }
+
+    /* 双列布局强制堆叠为单列 */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+    }
+    [data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+
+    /* 指标卡片在手机上 2x2 排列 */
+    .metric-card {
+        min-width: calc(50% - 0.4rem);
+        padding: 0.6rem 0.4rem;
+    }
+    .metric-value { font-size: 1rem; }
+    .metric-label { font-size: 0.7rem; }
+
+    /* 标题字号缩小 */
+    .section-title { font-size: 0.95rem; }
+    .chan-theory-box { font-size: 0.85rem; padding: 10px; }
+
+    /* 防止 iOS Safari 输入框自动缩放（需 font-size >= 16px）*/
+    input, select, textarea { font-size: 16px !important; }
+
+    /* 信号卡片更紧凑 */
+    [data-testid="stMarkdownContainer"] div[style*="border-left"] {
+        padding: 8px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* 超小屏（iPhone SE 等）进一步缩减 */
+    .metric-container { gap: 0.5rem; }
+    .metric-card { padding: 0.5rem 0.3rem; }
+    .metric-value { font-size: 0.9rem; }
+    .chan-theory-box { font-size: 0.8rem; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -510,12 +581,19 @@ def build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbo
     fig.add_trace(go.Scatter(x=df.index, y=df["DEA"], name="DEA", line=dict(color="#3b82f6",width=1)), row=2,col=1)
 
     fig.update_layout(
-        height=600, margin=dict(l=20,r=80,t=10,b=10),
+        height=520, margin=dict(l=10,r=60,t=10,b=10),
         xaxis_rangeslider_visible=False, xaxis2_rangeslider_visible=False,
-        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="left",x=0),
+        legend=dict(
+            orientation="h", xanchor="left", x=0.01,
+            yanchor="top", y=0.99,
+            bgcolor="rgba(255,255,255,0.75)",
+            bordercolor="#e2e8f0", borderwidth=1,
+            font=dict(size=10), tracegroupgap=2,
+        ),
         hovermode="x unified", plot_bgcolor="#fff", paper_bgcolor="#fff",
         xaxis=dict(gridcolor="#f1f5f9"), yaxis=dict(gridcolor="#f1f5f9",side="right"),
         xaxis2=dict(gridcolor="#f1f5f9"), yaxis2=dict(gridcolor="#f1f5f9",side="right"),
+        dragmode="pan",
     )
     fig.update_xaxes(rangebreaks=[dict(bounds=["sat","mon"])])
     return fig
@@ -566,12 +644,44 @@ def fetch_futures_list() -> pd.DataFrame:
     df = df.sort_values(["is_main", "code"], ascending=[False, True]).drop(columns="is_main")
     return df.reset_index(drop=True)
 
+# ================= 标的中文名称查询 =================
+@st.cache_data(ttl=600, show_spinner=False)
+def get_stock_name(symbol: str, market: str) -> str:
+    """返回标的的中文名称，失败时返回原代码"""
+    try:
+        if market == MARKET_FUTURES:
+            fdf = fetch_futures_list()
+            if not fdf.empty:
+                match = fdf[fdf["code"] == symbol.strip().upper()]
+                if not match.empty:
+                    return match.iloc[0]["name"]
+        elif market == MARKET_CN:
+            pfx = "sh" if (int(symbol) >= 600000 or 500000 <= int(symbol) < 600000) else "sz"
+            r = SESSION.get(f"https://qt.gtimg.cn/q={pfx}{symbol}", timeout=5)
+            parts = r.text.split("~")
+            if len(parts) > 1 and parts[1].strip():
+                return parts[1].strip()
+        elif market == MARKET_HK:
+            sym = symbol.replace(".HK", "").zfill(5)
+            r = SESSION.get(f"https://qt.gtimg.cn/q=hk{sym}", timeout=5)
+            parts = r.text.split("~")
+            if len(parts) > 1 and parts[1].strip():
+                return parts[1].strip()
+        elif market == MARKET_US:
+            import yfinance as yf
+            info = yf.Ticker(symbol.replace(".", "-").upper()).info
+            return info.get("longName") or info.get("shortName") or symbol
+    except Exception:
+        pass
+    return symbol
+
 # ================= session_state 初始化（解决侧边栏双击 bug）=================
 _MARKET_LIST = [MARKET_US, MARKET_CN, MARKET_HK, MARKET_FUTURES]
 _DEFAULT_SYM  = {MARKET_US:"EDU", MARKET_CN:"000001", MARKET_HK:"00700", MARKET_FUTURES:"RB0"}
 
-if "mkt" not in st.session_state: st.session_state["mkt"] = MARKET_US
-if "sym" not in st.session_state: st.session_state["sym"] = _DEFAULT_SYM[MARKET_US]
+if "mkt"      not in st.session_state: st.session_state["mkt"]      = MARKET_US
+if "sym"      not in st.session_state: st.session_state["sym"]      = _DEFAULT_SYM[MARKET_US]
+if "sym_name" not in st.session_state: st.session_state["sym_name"] = ""
 if "futures_df" not in st.session_state: st.session_state["futures_df"] = None
 
 # ================= 侧边栏 =================
@@ -653,6 +763,10 @@ with st.sidebar:
                     index=default_idx,
                 )
                 symbol = codes[labels.index(chosen)]
+                # 保存中文名称到 session_state
+                _row = filtered[filtered["code"] == symbol]
+                if not _row.empty:
+                    st.session_state["sym_name"] = _row.iloc[0]["name"]
                 # 显示当前选中信息
                 st.caption(f"📌 当前合约：**{symbol}**")
 
@@ -688,12 +802,52 @@ with st.sidebar:
     )
 
 # ================= 主界面 =================
+# 顶部标题栏（用占位符，分析完成后可即时更新）
+_header_ph = st.empty()
+
+def _render_header(code: str, name: str, mkt: str):
+    if name:
+        _header_ph.markdown(
+            f'<div class="sym-header">'
+            f'<span class="sym-code">{code}</span>'
+            f'<span class="sym-name">{name}</span>'
+            f'<span class="sym-market">{mkt}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        _header_ph.markdown(
+            '<div class="sym-hint">← 请点击左上角 ≫ 展开参数面板，选择标的后点击「执行推演」</div>',
+            unsafe_allow_html=True,
+        )
+
+# 用上一次缓存的名称先渲染（首次为提示语）
+_render_header(
+    st.session_state.get("sym", ""),
+    st.session_state.get("sym_name", ""),
+    st.session_state.get("mkt", ""),
+)
+
 if run_btn:
+    # ── 空输入校验 ──────────────────────────────────────────
+    if not symbol or not symbol.strip():
+        st.warning("⚠️ 请先输入交易标的代码，再执行推演")
+        st.stop()
+
     with st.spinner(f"正在分析 {symbol} 的几何结构与动力学特征..."):
         try:
             df_raw = fetch_stock_data(symbol, start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d"), market)
+            if df_raw is None or df_raw.empty:
+                st.warning(f"⚠️ 未查询到「{symbol}」的行情数据，请检查代码格式或调整日期范围")
+                st.stop()
+
             df_raw["date"] = pd.to_datetime(df_raw["date"])
             df = calc_macd(df_raw)
+
+            # 获取中文名称并立即更新顶部标题
+            _fetched_name = get_stock_name(symbol, market)
+            st.session_state["sym_name"] = _fetched_name
+            _render_header(symbol, _fetched_name, market)
 
             std_klines    = process_inclusion(df.copy())
             all_fractals  = find_fractals(std_klines)
@@ -724,9 +878,13 @@ if run_btn:
             """, unsafe_allow_html=True)
 
             plotly_fig = build_plotly_chart(df, valid_strokes, hubs, buy_signals, sell_signals, symbol, market)
-            st.plotly_chart(plotly_fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(plotly_fig, use_container_width=True, config={
+                "displayModeBar": False,
+                "scrollZoom": True,
+                "responsive": True,
+            })
 
-            col_left, col_right = st.columns([5.5, 4.5])
+            col_left, col_right = st.columns([5.5, 4.5], gap="medium")
 
             with col_left:
                 st.markdown('<div class="section-title">📖 缠中说禅：当下走势的哲学解剖</div>', unsafe_allow_html=True)
@@ -778,6 +936,7 @@ if run_btn:
                             <span style="font-size:0.85rem;color:#475569;"><b>底层逻辑：</b>{theory}</span>
                         </div>""", unsafe_allow_html=True)
 
+        except ValueError as e:
+            st.warning(f"⚠️ 未查询到数据：{e}")
         except Exception as e:
-            st.error(f"分析异常：{e}")
-            st.exception(e)
+            st.error(f"⚠️ 查询失败，请检查代码格式或网络连接（{type(e).__name__}）")
