@@ -796,6 +796,21 @@ with st.sidebar:
 
     # ── 快捷区间 ─────────────────────────────────────────────
     st.markdown('<div style="font-size:0.8rem;color:#64748b;margin:6px 0 4px;">⚡ 快捷区间</div>', unsafe_allow_html=True)
+    # 第一行：今日 / 昨日
+    _dc1, _dc2 = st.columns(2)
+    with _dc1:
+        if st.button("今日", key="preset_today", use_container_width=True):
+            _t = _dt.date.today()
+            st.session_state["start_date"] = _t
+            st.session_state["end_date"]   = _t
+            st.rerun()
+    with _dc2:
+        if st.button("昨日", key="preset_yesterday", use_container_width=True):
+            _t = _dt.date.today() - _dt.timedelta(days=1)
+            st.session_state["start_date"] = _t
+            st.session_state["end_date"]   = _t
+            st.rerun()
+    # 第二行：1月 / 1季 / 半年 / 1年
     _qcols = st.columns(4)
     _quick = [("1月", 30), ("1季", 91), ("半年", 183), ("1年", 365)]
     for _qc, (_ql, _qd) in zip(_qcols, _quick):
