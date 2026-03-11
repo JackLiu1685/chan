@@ -171,6 +171,8 @@ footer { visibility: hidden; }
 .sym-name { font-size:1.15rem; font-weight:800; color:#0f172a; }
 .sym-market { font-size:0.75rem; color:#94a3b8; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:2px 6px; }
 .sym-hint { font-size:0.9rem; color:#94a3b8; padding:0.5rem 0.2rem 0.8rem; border-bottom:1px solid #f1f5f9; margin-bottom:0.8rem; }
+/* 快捷区间按钮紧凑样式 */
+[data-testid="stSidebar"] button[kind="secondary"] { padding: 0.2rem 0.1rem !important; font-size: 0.78rem !important; min-height: 1.8rem !important; }
 
 /* ========== 移动端适配 ========== */
 @media (max-width: 768px) {
@@ -679,9 +681,14 @@ def get_stock_name(symbol: str, market: str) -> str:
 _MARKET_LIST = [MARKET_US, MARKET_CN, MARKET_HK, MARKET_FUTURES]
 _DEFAULT_SYM  = {MARKET_US:"NVDA", MARKET_CN:"300308", MARKET_HK:"01810", MARKET_FUTURES:"AU0"}
 
-if "mkt"      not in st.session_state: st.session_state["mkt"]      = MARKET_US
-if "sym"      not in st.session_state: st.session_state["sym"]      = _DEFAULT_SYM[MARKET_US]
-if "sym_name" not in st.session_state: st.session_state["sym_name"] = ""
+import datetime as _dt
+_today = _dt.date.today()
+
+if "mkt"        not in st.session_state: st.session_state["mkt"]        = MARKET_US
+if "sym"        not in st.session_state: st.session_state["sym"]        = _DEFAULT_SYM[MARKET_US]
+if "sym_name"   not in st.session_state: st.session_state["sym_name"]   = ""
+if "start_date" not in st.session_state: st.session_state["start_date"] = _today - _dt.timedelta(days=183)
+if "end_date"   not in st.session_state: st.session_state["end_date"]   = _today
 if "futures_df" not in st.session_state: st.session_state["futures_df"] = None
 
 # ================= 侧边栏 =================
@@ -787,8 +794,20 @@ with st.sidebar:
 
     st.session_state["sym"] = symbol  # 同步，防 rerun 丢失
 
-    start_date = st.date_input("开始日期", value=pd.to_datetime("2025-06-01"))
-    end_date   = st.date_input("结束日期",  value=pd.to_datetime("today"))
+    # ── 快捷区间 ─────────────────────────────────────────────
+    st.markdown('<div style="font-size:0.8rem;color:#64748b;margin:6px 0 4px;">⚡ 快捷区间</div>', unsafe_allow_html=True)
+    _qcols = st.columns(4)
+    _quick = [("1月", 30), ("1季", 91), ("半年", 183), ("1年", 365)]
+    for _qc, (_ql, _qd) in zip(_qcols, _quick):
+        with _qc:
+            if st.button(_ql, key=f"preset_{_qd}", use_container_width=True):
+                _t = _dt.date.today()
+                st.session_state["start_date"] = _t - _dt.timedelta(days=_qd)
+                st.session_state["end_date"]   = _t
+                st.rerun()
+
+    start_date = st.date_input("开始日期", key="start_date")
+    end_date   = st.date_input("结束日期",  key="end_date")
 
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
     run_btn = st.button("🚀 执行推演", type="primary", use_container_width=True)
