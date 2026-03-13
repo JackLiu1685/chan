@@ -422,6 +422,16 @@ header[data-testid="stHeader"],
     background: var(--sb-bg) !important;
     border-right: 1px solid var(--border) !important;
     box-shadow: none !important;
+    transition: transform .28s ease, margin-left .28s ease !important;
+}
+/* 折叠状态 */
+body[data-sb-collapsed] [data-testid="stSidebar"] {
+    transform: translateX(-100%) !important;
+    margin-left: -21rem !important;
+    min-width: 0 !important;
+}
+body[data-sb-collapsed] [data-testid="stMain"] {
+    margin-left: 0 !important;
 }
 /* 消除侧边栏顶部空白 */
 section[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; margin-top: 0 !important; }
@@ -680,19 +690,14 @@ section[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; 
     var saved = localStorage.getItem('chanlun-theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
 
-    // ── 通用侧边栏切换函数（全局暴露，供页面内按钮调用）──
+    // ── 通用侧边栏切换函数（直接 CSS 操控，不依赖 Streamlit 内部按钮）──
     window.chanToggleSidebar = function toggleSidebar() {
-        var sidebar = document.querySelector('[data-testid="stSidebar"]');
-        var sbRect  = sidebar ? sidebar.getBoundingClientRect() : null;
-        var isOpen  = sbRect && sbRect.width > 50;
-        var testId  = isOpen ? 'stSidebarCollapseButton' : 'stExpandSidebarButton';
-        var el = document.querySelector('[data-testid="' + testId + '"] button')
-              || document.querySelector('[data-testid="' + testId + '"]');
-        if (el) {
-            el.style.cssText = 'display:flex!important;visibility:visible!important;pointer-events:all!important;';
-            el.click();
-            setTimeout(function(){ el.style.cssText = ''; }, 100);
+        if (document.body.hasAttribute('data-sb-collapsed')) {
+            document.body.removeAttribute('data-sb-collapsed');
+        } else {
+            document.body.setAttribute('data-sb-collapsed', '1');
         }
+        setTimeout(syncHeader, 320);
     }
 
     // ── 桌面端边缘按钮 ──
@@ -723,7 +728,7 @@ section[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; 
         if (!sidebar) return;
         var isMobile = window.innerWidth <= 768;
         var sbRect   = sidebar.getBoundingClientRect();
-        var isOpen   = sbRect.width > 50;
+        var isOpen   = !document.body.hasAttribute('data-sb-collapsed') && sbRect.width > 50;
         if (header) header.style.left = (!isMobile && isOpen) ? sbRect.right + 'px' : '0px';
         if (edgeBtn) {
             edgeBtn.style.left = sbRect.right + 'px';
@@ -1520,20 +1525,7 @@ with st.sidebar:
 
 # ================= 主界面 =================
 # ── 顶部侧边栏切换快捷按钮 ────────────────────────────────────
-_TOGGLE_JS = (
-    "(function(){"
-    "var sb=document.querySelector('[data-testid=stSidebar]');"
-    "var open=sb&&sb.getBoundingClientRect().width>50;"
-    "var t=open?'stSidebarCollapseButton':'stExpandSidebarButton';"
-    "var el=document.querySelector('[data-testid='+t+'] button')"
-    "||document.querySelector('[data-testid='+t+']');"
-    "if(el){"
-    "el.style.cssText='display:flex!important;visibility:visible!important;pointer-events:all!important;';"
-    "el.click();"
-    "setTimeout(function(){el.style.cssText=''},100);"
-    "}"
-    "})()"
-)
+_TOGGLE_JS = "window.chanToggleSidebar&&window.chanToggleSidebar()"
 st.markdown(
     f'<button onclick="{_TOGGLE_JS}" '
     'title="展开/收起侧边栏" '
