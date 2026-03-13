@@ -654,6 +654,35 @@ section[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; 
 
 /* ══ RESPONSIVE — ③ 移动端全面适配 ══ */
 @media (max-width: 768px) {
+    /* 侧边栏改为 overlay 抽屉 */
+    [data-testid="stSidebar"] {
+        position: fixed !important;
+        top: 0 !important; left: 0 !important;
+        height: 100vh !important;
+        width: 88vw !important; max-width: 320px !important;
+        z-index: 2000 !important;
+        overflow-y: auto !important;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.18) !important;
+        transition: transform .28s ease !important;
+    }
+    /* 移动端主内容始终全宽 */
+    [data-testid="stMain"] {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+    /* 移动端折叠：侧边栏滑出屏幕 */
+    body[data-sb-collapsed] [data-testid="stSidebar"] {
+        transform: translateX(-100%) !important;
+        margin-left: 0 !important;
+    }
+    /* 遮罩层 */
+    #chan-mob-overlay {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 1999;
+    }
+    body:not([data-sb-collapsed]) #chan-mob-overlay { display: block; }
     /* 内容区 */
     .block-container {
         padding-top: 64px !important;
@@ -710,6 +739,20 @@ section[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; 
     // ── 主题切换 ──
     var saved = localStorage.getItem('chanlun-theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
+
+    // ── 移动端：默认折叠侧边栏，创建遮罩层 ──
+    if (window.innerWidth <= 768) {
+        document.body.setAttribute('data-sb-collapsed', '1');
+        if (!document.getElementById('chan-mob-overlay')) {
+            var overlay = document.createElement('div');
+            overlay.id = 'chan-mob-overlay';
+            overlay.onclick = function() {
+                document.body.setAttribute('data-sb-collapsed', '1');
+                setTimeout(syncHeader, 320);
+            };
+            document.body.appendChild(overlay);
+        }
+    }
 
     // ── 通用侧边栏切换函数（直接 CSS 操控，不依赖 Streamlit 内部按钮）──
     window.chanToggleSidebar = function toggleSidebar() {
