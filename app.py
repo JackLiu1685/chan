@@ -635,8 +635,16 @@ section[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; 
 .quote-text  { font-size: 0.75rem; color: #92400e; line-height: 1.7; font-style: italic; }
 
 /* ══ SYM HINT ══ */
-.sym-hint { display: flex; align-items: center; gap: 10px; font-size: 0.78rem; color: var(--text3); padding: 0.6rem 0 1.2rem; }
-.sym-hint::before { content: "\u203a"; font-size: 1rem; color: var(--border2); }
+.sym-hint {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.85rem; font-weight: 500; color: var(--text2);
+    background: var(--bg2, #f8fafc);
+    border: 1.5px dashed var(--border2, #cbd5e1);
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin: 2px 0 8px;
+}
+.sym-hint::before { content: "👈"; font-size: 1.1rem; }
 
 /* ══ EMPTY STATE ══ */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1rem; }
@@ -1561,7 +1569,7 @@ if st.session_state.get("sym_name"):
     )
 else:
     _header_ph.markdown(
-        '<div class="sym-hint">展开左侧面板，选择标的后点击「执行推演」</div>',
+        '<div class="sym-hint">在左侧面板输入交易标的，点击「执行推演」开始分析</div>',
         unsafe_allow_html=True,
     )
 
