@@ -1537,14 +1537,6 @@ with st.sidebar:
     )
 
 # ================= 主界面 =================
-# ── 顶部侧边栏切换快捷按钮 ────────────────────────────────────
-_TOGGLE_JS = "window.chanToggleSidebar&&window.chanToggleSidebar()"
-st.markdown(
-    f'<button onclick="{_TOGGLE_JS}" '
-    'title="展开/收起侧边栏" class="chan-toggle-btn">&#9776;</button>',
-    unsafe_allow_html=True,
-)
-
 _header_ph = st.empty()
 
 def _render_header(code: str, name: str, mkt: str):
