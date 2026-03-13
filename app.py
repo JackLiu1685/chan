@@ -293,6 +293,19 @@ header[data-testid="stHeader"],
 [data-testid="stSidebarHeader"] {
     display: none !important;
 }
+/* 主界面顶部切换按钮 */
+.chan-toggle-btn {
+    width:40px;height:40px;border-radius:8px;
+    border:1px solid var(--border,#e2e8f0);
+    background:var(--bg2,#f8fafc);color:var(--text2,#475569);
+    font-size:1.1rem;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:background .15s,color .15s;margin-bottom:4px;
+    -webkit-tap-highlight-color:transparent;
+}
+.chan-toggle-btn:hover {
+    background:var(--bg3,#f1f5f9);color:var(--text,#1e293b);
+}
 /* 侧边栏边缘切换按钮（桌面端） */
 #chan-edge-btn {
     position: fixed;
@@ -1528,14 +1541,7 @@ with st.sidebar:
 _TOGGLE_JS = "window.chanToggleSidebar&&window.chanToggleSidebar()"
 st.markdown(
     f'<button onclick="{_TOGGLE_JS}" '
-    'title="展开/收起侧边栏" '
-    'style="width:40px;height:40px;border-radius:8px;border:1px solid var(--border,#e2e8f0);'
-    'background:var(--bg2,#f8fafc);color:var(--text2,#475569);font-size:1.1rem;'
-    'cursor:pointer;display:inline-flex;align-items:center;justify-content:center;'
-    'transition:background .15s,color .15s;margin-bottom:4px;'
-    '-webkit-tap-highlight-color:transparent;" '
-    'onmouseover="this.style.background=\'var(--bg3,#f1f5f9)\';this.style.color=\'var(--text,#1e293b)\'" '
-    'onmouseout="this.style.background=\'var(--bg2,#f8fafc)\';this.style.color=\'var(--text2,#475569)\'">&#9776;</button>',
+    'title="展开/收起侧边栏" class="chan-toggle-btn">&#9776;</button>',
     unsafe_allow_html=True,
 )
 
